@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suika Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: white;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .info-panel {
+            display: flex;
+            gap: 40px;
+            color: white;
+            font-size: 1.2em;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            opacity: 0.8;
+        }
+
+        .info-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        canvas {
+            border: 3px solid white;
+            background: linear-gradient(180deg, #87ceeb 0%, #e0f6ff 100%);
+            border-radius: 10px;
+            cursor: none;
+            display: block;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .controls {
+            color: white;
+            text-align: center;
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.1em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .game-over-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            z-index: 1000;
+            display: none;
+            min-width: 300px;
+        }
+
+        .game-over-screen h2 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+
+        .game-over-screen p {
+            font-size: 1.3em;
+            margin-bottom: 30px;
+        }
+
+        .game-over-screen.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🍎 Suika Game 🍉</h1>
+        
+        <div class="info-panel">
+            <div class="info-item">
+                <span class="info-label">Score</span>
+                <span class="info-value" id="score">0</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Next Fruit</span>
+                <span class="info-value" id="nextFruit">🍎</span>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+        <div class="controls">
+            <p>Move: Mouse / Arrow Keys | Drop: Click / Space</p>
+        </div>
+
+        <button onclick="location.reload()">New Game</button>
+
+        <div class="game-over-screen" id="gameOverScreen">
+            <h2>Game Over!</h2>
+            <p id="finalScore">Final Score: 0</p>
+            <button onclick="location.reload()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game variables
+        let score = 0;
+        let gameOver = false;
+        let fruits = [];
+        let nextFruitType = 0;
+        let mouseX = canvas.width / 2;
+        let mouseY = 0;
+
+        const FRUIT_TYPES = [
+            { name: '🍎', size: 20, points: 10 },
+            { name: '🍊', size: 25, points: 20 },
+            { name: '🍋', size: 30, points: 30 },
+            { name: '🍌', size: 35, points: 50 },
+            { name: '🍉', size: 45, points: 100 },
+            { name: '🍓', size: 50, points: 150 },
+            { name: '🥝', size: 55, points: 200 },
+            { name: '🍒', size: 60, points: 300 }
+        ];
+
+        class Fruit {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.size = FRUIT_TYPES[type].size;
+                this.vx = 0;
+                this.vy = 0;
+                this.merged = false;
+            }
+
+            update() {
+                // Gravity
+                this.vy += 0.3;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Friction
+                this.vx *= 0.98;
+
+                // Boundaries
+                if (this.x - this.size < 0) {
+                    this.x = this.size;
+                    this.vx *= -0.8;
+                }
+                if (this.x + this.size > canvas.width) {
+                    this.x = canvas.width - this.size;
+                    this.vx *= -0.8;
+                }
+                if (this.y + this.size > canvas.height) {
+                    this.y = canvas.height - this.size;
+                    this.vy *= -0.6;
+                }
+            }
+
+            draw() {
+                ctx.font = `${this.size * 1.5}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(FRUIT_TYPES[this.type].name, this.x, this.y);
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y + this.size + 3, this.size * 0.8, this.size * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            checkCollision(other) {
+                const dx = this.x - other.x;
+                const dy = this.y - other.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < this.size + other.size - 5;
+            }
+        }
+
+        function updateScore(points) {
+            score += points;
+            document.getElementById('score').textContent = score;
+        }
+
+        function updateNextFruit() {
+            nextFruitType = Math.floor(Math.random() * 3); // Only small fruits
+            document.getElementById('nextFruit').textContent = FRUIT_TYPES[nextFruitType].name;
+        }
+
+        function dropFruit() {
+            if (!gameOver) {
+                const fruit = new Fruit(mouseX, 20, nextFruitType);
+                fruits.push(fruit);
+                updateNextFruit();
+            }
+        }
+
+        function checkGameOver() {
+            for (let fruit of fruits) {
+                if (fruit.y - fruit.size < 50) {
+                    gameOver = true;
+                    document.getElementById('finalScore').textContent = `Final Score: ${score}`;
+                    document.getElementById('gameOverScreen').classList.add('show');
+                    return;
+                }
+            }
+        }
+
+        function gameLoop() {
+            // Clear canvas
+            ctx.fillStyle = 'rgba(135, 206, 235, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!gameOver) {
+                // Update fruits
+                for (let fruit of fruits) {
+                    fruit.update();
+                }
+
+                // Check collisions and merging
+                for (let i = 0; i < fruits.length; i++) {
+                    for (let j = i + 1; j < fruits.length; j++) {
+                        if (fruits[i].checkCollision(fruits[j]) && 
+                            fruits[i].type === fruits[j].type &&
+                            fruits[i].type < FRUIT_TYPES.length - 1 &&
+                            !fruits[i].merged &&
+                            !fruits[j].merged) {
+                            
+                            // Merge fruits
+                            const newFruit = new Fruit(
+                                (fruits[i].x + fruits[j].x) / 2,
+                                (fruits[i].y + fruits[j].y) / 2,
+                                fruits[i].type + 1
+                            );
+                            fruits[i].merged = true;
+                            fruits[j].merged = true;
+                            fruits.splice(j, 1);
+                            fruits.splice(i, 1);
+                            fruits.push(newFruit);
+                            updateScore(FRUIT_TYPES[newFruit.type].points);
+                            i--;
+                            break;
+                        }
+                    }
+                }
+
+                // Remove merged fruits
+                fruits = fruits.filter(f => !f.merged);
+
+                // Draw preview fruit
+                ctx.font = '40px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.globalAlpha = 0.7;
+                ctx.fillText(FRUIT_TYPES[nextFruitType].name, mouseX, 30);
+                ctx.globalAlpha = 1;
+
+                // Draw line to show drop position
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(mouseX, 50);
+                ctx.lineTo(mouseX, canvas.height);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                checkGameOver();
+            }
+
+            // Draw fruits
+            for (let fruit of fruits) {
+                fruit.draw();
+            }
+
+            // Draw game over line
+            ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 50);
+            ctx.lineTo(canvas.width, 50);
+            ctx.stroke();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners
+        document.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = Math.max(FRUIT_TYPES[nextFruitType].size, 
+                             Math.min(canvas.width - FRUIT_TYPES[nextFruitType].size, 
+                                     e.clientX - rect.left));
+        });
+
+        document.addEventListener('click', dropFruit);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                dropFruit();
+                e.preventDefault();
+            }
+            if (e.key === 'ArrowLeft') {
+                mouseX = Math.max(FRUIT_TYPES[nextFruitType].size, mouseX - 20);
+            }
+            if (e.key === 'ArrowRight') {
+                mouseX = Math.min(canvas.width - FRUIT_TYPES[nextFruitType].size, mouseX + 20);
+            }
+        });
+
+        // Initialize
+        updateNextFruit();
+        gameLoop();
+    </script>
+</body>
+</html>
